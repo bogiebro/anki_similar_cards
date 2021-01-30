@@ -19,6 +19,7 @@ from lxml.html import fromstring
 # Re-write index on quit
 # Remove 0 counts on save
 # Don't show any of the top if the they're all below a threshold
+# When we show matching, we can use search "nid:1611866090425" in the browser
 
 def field_text(flds):
     for fld in flds:
