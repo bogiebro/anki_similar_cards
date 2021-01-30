@@ -10,10 +10,11 @@ from lxml.html import fromstring
 
 # TODO:
 # Handle MathJax (requires re-doing view as html)
+# Make a default label for the label if no note is selected for query
+# Don't regenerate entire matrix on every modification
 # Use idf, or better yet LDA
-# Use BK-tree instead of exhaustive enumeration
+# Use BK-tree instead of exhaustive enumeration (profile this)
 # Jump to note in browser on click
-# Handle note deletion
 # Handle note syncing
 # Re-write index on quit
 # Remove 0 counts on save
@@ -54,9 +55,17 @@ class MatchItem(QWidget):
             if ix > 0:
                 label.setIndent(50)
 
+def handle_modified_note(note, query):
+    global dirty_counts, counts, ids
+    ix = np.searchsorted(ids, note.id)
+    lil_counts = counts.tolil()
+    lil_counts[ix,:] = query
+    counts = lil_counts.tocsr()
+    dirty_counts = True
+
 typing_cache = None
 def handle_typing_timer(note):
-    global typing_cache, list_widget, counts, ids, query
+    global typing_cache, list_widget, counts, ids
     text = " ".join(field_text(note.fields))
     text_hash = hash(text)
     if text_hash == typing_cache: return
@@ -73,18 +82,12 @@ def handle_typing_timer(note):
             list_item.setSizeHint(item.sizeHint())
             list_widget.addItem(list_item)
             list_widget.setItemWidget(list_item, item)
-            # eventually keep the ids so we can jump to them 
+            # eventually keep the ids so we can jump to them
+        if note.id > 0:
+            handle_modified_note(note, query)
 
 gui_hooks.editor_did_fire_typing_timer.append(handle_typing_timer)
 gui_hooks.editor_did_load_note.append(lambda editor: handle_typing_timer(editor.note))
-
-
-def handle_modified_note(note):
-    global dirty_counts, query, ids
-    ix = np.searchsorted(ids, note.id)
-    counts[ix,:] = query
-    dirty_counts = True
-hooks.note_will_flush.append(handle_modified_note)
 
 def handle_deleted(_, note_ids):
     global dirty_counts, ids
@@ -94,9 +97,14 @@ def handle_deleted(_, note_ids):
     dirty_counts = True
 hooks.notes_will_be_deleted.append(handle_deleted)
 
+def handle_exit():
+    print("EXITING")
+gui_hooks.profile_will_close.append(handle_exit)
+
 def init_hook():
     global count_extractor, list_widget, counts, ids, dirty_counts
     dirty_counts = False
+
     list_widget = QListWidget()
     list_widget.setAlternatingRowColors(True)
 
