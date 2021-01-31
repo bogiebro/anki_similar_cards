@@ -10,9 +10,13 @@ from lxml.html import fromstring
 from sklearn.feature_extraction.text import HashingVectorizer, TfidfTransformer
 import joblib
 
-# TODO: - Handle MathJax (requires re-doing view as html) - Make a default label
-# for the label if no note is selected for query - Handle note syncing - When we
-# show matching, we can use search "nid:1611866090425" in the browser. Jump to
+# TODO:
+# - Figure out why pickling the idf values is so expensive. Perhaps we should
+# just recompute them on start.
+# - Handle MathJax (requires re-doing view as html)
+# - Make a default label for the label if no note is selected for query
+# - Handle note syncing
+# - When we show matching, we can use search "nid:" in the browser. Jump to
 # note in browser on click
 
 def field_text(flds):
@@ -98,48 +102,47 @@ def handle_deleted(_, note_ids):
 hooks.notes_will_be_deleted.append(handle_deleted)
 
 def save_computed():
-    global dirty_counts, counts, vecs, ids, COUNTS_FILE, VECS_FILE, IDS_FILE
+    global dirty_counts, counts, vecs, ids, COUNTS_FILE, VECS_FILE, IDS_FILE, IDF_FILE
     if dirty_counts:
         sp.save_npz(COUNTS_FILE, counts)
         sp.save_npz(VECS_FILE, vecs)
         np.save(IDS_FILE, ids, allow_pickle=False)
-        joblib.dump(tfidf, 'tfidf.joblib')
+        joblib.dump(tfidf, IDF_FILE)
     dirty_counts = False
 
 gui_hooks.profile_will_close.append(save_computed)
 
 def load_db():
     "Initialize the wordcount database if it doesn't exist."
-    global counts, vecs, ids, tfidf, COUNTS_FILE, IDS_FILE, IDF_FILE, VECS_FILE
+    global counts, vecs, ids, tfidf, COUNTS_FILE, IDS_FILE, IDF_FILE, VECS_FILE, dirty_counts
     path_this_addon = os.path.join(mw.pm.addonFolder(), __name__.split(".")[0])
     path_user_dir = os.path.join(path_this_addon, "user_files")
     os.makedirs(path_user_dir, exist_ok=True)
     COUNTS_FILE = os.path.join(path_user_dir, "counts.npz")
     IDS_FILE = os.path.join(path_user_dir, "ids.npy")
-    IDF_FILE = os.path.join(path_user_dir, "idf.joblib")
+    IDF_FILE = os.path.join(path_user_dir, "idf.joblib.bz2")
     VECS_FILE = os.path.join(path_user_dir, "vecs.npz")
     if os.path.exists(COUNTS_FILE) and os.path.exists(IDS_FILE):
         counts = sp.load_npz(COUNTS_FILE)
         ids = np.load(IDS_FILE, allow_pickle=False)
-        dirty_ids = False
+        clean_ids = True
     else:
         counts, ids = init_counts_file()
-        dirty_ids = True
-    dirty_counts = True
+        clean_ids = False
+    clean_counts = False
     if os.path.exists(IDF_FILE):
         tfidf = joblib.load(IDF_FILE)
         if os.path.exists(VECS_FILE):
             vecs = sp.load_npz(VECS_FILE)
-            dirty_counts = False
+            clean_counts = True
     else:
         tfidf = TfidfTransformer()
         vecs = tfidf.fit_transform(counts)
-    dirty_counts |= dirty_ids
-    print("Initialized new counts file")
+    dirty_counts = not (clean_counts and clean_ids)
+    print("Initialized new counts file, dirty=", dirty_counts)
 
 def init_hook():
     global count_extractor, tfidf, list_widget, dirty_counts
-    dirty_counts = False
     list_widget = QListWidget()
     list_widget.setAlternatingRowColors(True)
     count_extractor = HashingVectorizer(
