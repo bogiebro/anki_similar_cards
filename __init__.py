@@ -77,10 +77,13 @@ class SuggestionWindow(QWidget):
         self.list_widget.setItemWidget(list_item, item)
 
 def handle_modified_note(note, query_counts):
-    global dirty_counts, counts, vecs, ids
+    global counts, vecs, ids
     ix = np.searchsorted(ids, note.id)
     counts = sp.vstack((counts[:ix,:], query_counts, counts[ix+1:,:]))
     vecs = tfidf.fit_transform(counts)
+    if ix >= ids.shape[0] or ids[ix] != note.id:
+        ids = np.concatenate((ids[:ix], [note.id], ids[ix:]))
+    assert vecs.shape[0] == ids.shape[0] 
 
 typing_cache = None
 def handle_typing_timer(note):
@@ -93,6 +96,7 @@ def handle_typing_timer(note):
         query_counts = count_extractor.transform([" ".join(note.fields)])
         query = tfidf.transform(query_counts)
         dot_prods = (vecs @ query.T).A[:,0]
+        assert dot_prods.shape[0] == ids.shape[0] 
         max_ixs = np.argpartition(-dot_prods, 5)[:9]
         high_dot_prods = dot_prods[max_ixs]
         mask = high_dot_prods > 0.1
@@ -109,13 +113,12 @@ gui_hooks.editor_did_fire_typing_timer.append(handle_typing_timer)
 gui_hooks.editor_did_load_note.append(lambda editor: handle_typing_timer(editor.note))
 
 def handle_deleted(_, note_ids):
-    global dirty_counts, ids, counts, vecs
+    global ids, counts, vecs
     for id in note_ids:
         ix = np.searchsorted(ids, id)
         counts = sp.vstack((counts[:ix,:], counts[ix+1:,:]))
         ids = np.concatenate((ids[:ix], ids[ix+1:]))
         vecs = tfidf.fit_transform(counts)
-    dirty_counts = True
 hooks.notes_will_be_deleted.append(handle_deleted)
 
 def init_hook():
