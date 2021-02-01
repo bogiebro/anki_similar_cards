@@ -60,13 +60,13 @@ class SuggestionWindow(QWidget):
         self.list_widget = None
 
     def clear(self):
-        if self.list_widget:
+        if self.list_widget is not None:
             self.list_widget.clear()
-        else:
+        if self.hint is not None:
             self.list_widget = QListWidget()
             self.list_widget.setAlternatingRowColors(True)
             self.hint.setParent(None)
-            del self.hint
+            self.hint = None
             self.vbox.addWidget(self.list_widget)
 
     def addItem(self, item_text):
