@@ -1,6 +1,3 @@
-import os
-from itertools import chain
-
 import numpy as np
 import scipy.sparse as sp
 from anki import hooks
@@ -8,12 +5,9 @@ from aqt import gui_hooks, mw
 from aqt.qt import *
 from lxml.html import fromstring
 from sklearn.feature_extraction.text import HashingVectorizer, TfidfTransformer
-import joblib
 
 # TODO:
 # - Handle MathJax (requires re-doing view as html)
-# - Make a default label for the label if no note is selected for query
-# - Handle note syncing
 # - When we show matching, we can use search "nid:" in the browser. Jump to
 # note in browser on click
 
@@ -33,8 +27,8 @@ def init_counts():
     vecs = tfidf.fit_transform(counts)
 
 def handle_open_window():
-    global list_widget
-    list_widget.show()
+    global suggestion_window
+    suggestion_window.show()
 
 action = QAction("Show Similar Cards", mw)
 action.triggered.connect(handle_open_window)
@@ -53,6 +47,35 @@ class MatchItem(QWidget):
             if ix > 0:
                 label.setIndent(50)
 
+class SuggestionWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.vbox = QVBoxLayout()
+        self.setLayout(self.vbox)
+        font = QFont("Arial", 20)
+        self.hint = QLabel("Open the note editor to show similar notes")
+        self.hint.setAlignment(Qt.AlignCenter)
+        self.hint.setFont(font)
+        self.vbox.addWidget(self.hint)
+        self.list_widget = None
+
+    def clear(self):
+        if self.list_widget:
+            self.list_widget.clear()
+        else:
+            self.list_widget = QListWidget()
+            self.list_widget.setAlternatingRowColors(True)
+            self.hint.setParent(None)
+            del self.hint
+            self.vbox.addWidget(self.list_widget)
+
+    def addItem(self, item_text):
+        item = MatchItem(item_text)
+        list_item = QListWidgetItem(self.list_widget)
+        list_item.setSizeHint(item.sizeHint())
+        self.list_widget.addItem(list_item)
+        self.list_widget.setItemWidget(list_item, item)
+
 def handle_modified_note(note, query_counts):
     global dirty_counts, counts, vecs, ids
     ix = np.searchsorted(ids, note.id)
@@ -61,7 +84,7 @@ def handle_modified_note(note, query_counts):
 
 typing_cache = None
 def handle_typing_timer(note):
-    global typing_cache, list_widget, counts, ids
+    global typing_cache, suggestion_window, counts, ids
     text = " ".join(field_text(note.fields))
     text_hash = hash(text)
     if text_hash == typing_cache: return
@@ -75,15 +98,10 @@ def handle_typing_timer(note):
         mask = high_dot_prods > 0.1
         sorted_ixs = np.argsort(high_dot_prods[mask])[::-1]
         matching_ids = ids[max_ixs[mask][sorted_ixs][1:]]
-        list_widget.clear()
+        suggestion_window.clear()
         for id in matching_ids:
             flds = mw.col.db.scalar(f"select flds from notes where id = {id}")
-            item = MatchItem(field_text(flds.split(chr(0x1f))))
-            list_item = QListWidgetItem(list_widget)
-            list_item.setSizeHint(item.sizeHint())
-            list_widget.addItem(list_item)
-            list_widget.setItemWidget(list_item, item)
-            # eventually keep the ids so we can jump to them
+            suggestion_window.addItem(field_text(flds.split(chr(0x1f))))
         if note.id > 0:
             handle_modified_note(note, query)
 
@@ -101,9 +119,8 @@ def handle_deleted(_, note_ids):
 hooks.notes_will_be_deleted.append(handle_deleted)
 
 def init_hook():
-    global count_extractor, tfidf, list_widget
-    list_widget = QListWidget()
-    list_widget.setAlternatingRowColors(True)
+    global count_extractor, tfidf, list_widget, suggestion_window
+    suggestion_window = SuggestionWindow()
     count_extractor = HashingVectorizer(
         stop_words='english', alternate_sign=False, norm=None)
     tfidf = TfidfTransformer()
