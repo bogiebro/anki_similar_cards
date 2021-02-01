@@ -11,8 +11,6 @@ from sklearn.feature_extraction.text import HashingVectorizer, TfidfTransformer
 import joblib
 
 # TODO:
-# - Figure out why pickling the idf values is so expensive. Perhaps we should
-# just recompute them on start.
 # - Handle MathJax (requires re-doing view as html)
 # - Make a default label for the label if no note is selected for query
 # - Handle note syncing
@@ -23,8 +21,8 @@ def field_text(flds):
     for fld in flds:
         yield fromstring(fld).text_content() if fld else ""
 
-def init_counts_file():
-    global count_extractor, tfidf, ids
+def init_counts():
+    global count_extractor, tfidf, ids, counts, vecs
     id_list = []
     def note_iterator():
         for id, flds in mw.col.db.execute("select id, flds from notes order by id"):
@@ -32,7 +30,7 @@ def init_counts_file():
             yield " ".join(field_text(flds.split(chr(0x1f))))
     counts = count_extractor.transform(note_iterator())
     ids = np.array(id_list, dtype=np.long)
-    return counts, ids
+    vecs = tfidf.fit_transform(counts)
 
 def handle_open_window():
     global list_widget
@@ -60,7 +58,6 @@ def handle_modified_note(note, query_counts):
     ix = np.searchsorted(ids, note.id)
     counts = sp.vstack((counts[:ix,:], query_counts, counts[ix+1:,:]))
     vecs = tfidf.fit_transform(counts)
-    dirty_counts = True
 
 typing_cache = None
 def handle_typing_timer(note):
@@ -94,59 +91,20 @@ gui_hooks.editor_did_load_note.append(lambda editor: handle_typing_timer(editor.
 def handle_deleted(_, note_ids):
     global dirty_counts, ids, counts, vecs
     for id in note_ids:
-        ix = np.searchsorted(ids, note.id)
+        ix = np.searchsorted(ids, id)
         counts = sp.vstack((counts[:ix,:], counts[ix+1:,:]))
         ids = np.concatenate((ids[:ix], ids[ix+1:]))
         vecs = tfidf.fit_transform(counts)
     dirty_counts = True
 hooks.notes_will_be_deleted.append(handle_deleted)
 
-def save_computed():
-    global dirty_counts, counts, vecs, ids, COUNTS_FILE, VECS_FILE, IDS_FILE, IDF_FILE
-    if dirty_counts:
-        sp.save_npz(COUNTS_FILE, counts)
-        sp.save_npz(VECS_FILE, vecs)
-        np.save(IDS_FILE, ids, allow_pickle=False)
-        joblib.dump(tfidf, IDF_FILE)
-    dirty_counts = False
-
-gui_hooks.profile_will_close.append(save_computed)
-
-def load_db():
-    "Initialize the wordcount database if it doesn't exist."
-    global counts, vecs, ids, tfidf, COUNTS_FILE, IDS_FILE, IDF_FILE, VECS_FILE, dirty_counts
-    path_this_addon = os.path.join(mw.pm.addonFolder(), __name__.split(".")[0])
-    path_user_dir = os.path.join(path_this_addon, "user_files")
-    os.makedirs(path_user_dir, exist_ok=True)
-    COUNTS_FILE = os.path.join(path_user_dir, "counts.npz")
-    IDS_FILE = os.path.join(path_user_dir, "ids.npy")
-    IDF_FILE = os.path.join(path_user_dir, "idf.joblib.bz2")
-    VECS_FILE = os.path.join(path_user_dir, "vecs.npz")
-    if os.path.exists(COUNTS_FILE) and os.path.exists(IDS_FILE):
-        counts = sp.load_npz(COUNTS_FILE)
-        ids = np.load(IDS_FILE, allow_pickle=False)
-        clean_ids = True
-    else:
-        counts, ids = init_counts_file()
-        clean_ids = False
-    clean_counts = False
-    if os.path.exists(IDF_FILE):
-        tfidf = joblib.load(IDF_FILE)
-        if os.path.exists(VECS_FILE):
-            vecs = sp.load_npz(VECS_FILE)
-            clean_counts = True
-    else:
-        tfidf = TfidfTransformer()
-        vecs = tfidf.fit_transform(counts)
-    dirty_counts = not (clean_counts and clean_ids)
-    print("Initialized new counts file, dirty=", dirty_counts)
-
 def init_hook():
-    global count_extractor, tfidf, list_widget, dirty_counts
+    global count_extractor, tfidf, list_widget
     list_widget = QListWidget()
     list_widget.setAlternatingRowColors(True)
     count_extractor = HashingVectorizer(
         stop_words='english', alternate_sign=False, norm=None)
-    load_db()
+    tfidf = TfidfTransformer()
+    init_counts()
 
 gui_hooks.main_window_did_init.append(init_hook)
