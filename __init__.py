@@ -71,11 +71,13 @@ def handle_typing_timer(note):
         query = tfidf.transform(query_counts)
         dot_prods = (vecs @ query.T).A[:,0]
         max_ixs = np.argpartition(-dot_prods, 5)[:9]
-        matching_ids = ids[max_ixs[dot_prods[max_ixs] > 0.1]]
-        matching_ids = matching_ids[matching_ids != note.id]
+        high_dot_prods = dot_prods[max_ixs]
+        mask = high_dot_prods > 0.1
+        sorted_ixs = np.argsort(high_dot_prods[mask])[::-1]
+        matching_ids = ids[max_ixs[mask][sorted_ixs][1:]]
         list_widget.clear()
-        for id, flds in mw.col.db.execute(
-            f"select id, flds from notes where id in ({', '.join(map(str, matching_ids))})"):
+        for id in matching_ids:
+            flds = mw.col.db.scalar(f"select flds from notes where id = {id}")
             item = MatchItem(field_text(flds.split(chr(0x1f))))
             list_item = QListWidgetItem(list_widget)
             list_item.setSizeHint(item.sizeHint())
