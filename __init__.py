@@ -1,15 +1,10 @@
 import numpy as np
 import scipy.sparse as sp
 from anki import hooks
-from aqt import gui_hooks, mw
+from aqt import gui_hooks, mw, dialogs
 from aqt.qt import *
 from lxml.html import fromstring
 from sklearn.feature_extraction.text import HashingVectorizer, TfidfTransformer
-
-# TODO:
-# - Handle MathJax (requires re-doing view as html)
-# - When we show matching, we can use search "nid:" in the browser. Jump to
-# note in browser on click
 
 def field_text(flds):
     for fld in flds:
@@ -35,8 +30,9 @@ action.triggered.connect(handle_open_window)
 mw.form.menuTools.addAction(action)
 
 class MatchItem(QWidget):
-    def __init__(self, itr):
+    def __init__(self, note_id, itr):
         super().__init__()
+        self.search_str = "nid:" + str(note_id)
         vbox = QVBoxLayout()
         self.setLayout(vbox)
         for ix, a in enumerate(filter(None, itr)):
@@ -46,6 +42,11 @@ class MatchItem(QWidget):
             vbox.addWidget(label)
             if ix > 0:
                 label.setIndent(50)
+
+    def handle_click(self):
+        browser = dialogs.open("Browser", mw)
+        browser.form.searchEdit.lineEdit().setText(self.search_str)
+        browser.onSearchActivated()
 
 class SuggestionWindow(QWidget):
     def __init__(self):
@@ -59,18 +60,22 @@ class SuggestionWindow(QWidget):
         self.vbox.addWidget(self.hint)
         self.list_widget = None
 
+    def handle_click(self, item):
+        self.list_widget.itemWidget(item).handle_click()
+
     def clear(self):
         if self.list_widget is not None:
             self.list_widget.clear()
         if self.hint is not None:
             self.list_widget = QListWidget()
             self.list_widget.setAlternatingRowColors(True)
+            self.list_widget.itemClicked.connect(self.handle_click)
             self.hint.setParent(None)
             self.hint = None
             self.vbox.addWidget(self.list_widget)
 
-    def addItem(self, item_text):
-        item = MatchItem(item_text)
+    def addItem(self, note_id, item_text):
+        item = MatchItem(note_id, item_text)
         list_item = QListWidgetItem(self.list_widget)
         list_item.setSizeHint(item.sizeHint())
         self.list_widget.addItem(list_item)
@@ -105,7 +110,7 @@ def handle_typing_timer(note):
         suggestion_window.clear()
         for id in matching_ids:
             flds = mw.col.db.scalar(f"select flds from notes where id = {id}")
-            suggestion_window.addItem(field_text(flds.split(chr(0x1f))))
+            suggestion_window.addItem(id, field_text(flds.split(chr(0x1f))))
         if note.id > 0:
             handle_modified_note(note, query)
 
