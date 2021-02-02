@@ -88,7 +88,7 @@ def handle_modified_note(note, query_counts):
     vecs = tfidf.fit_transform(counts)
     if ix >= ids.shape[0] or ids[ix] != note.id:
         ids = np.concatenate((ids[:ix], [note.id], ids[ix:]))
-    # assert vecs.shape[0] == ids.shape[0] 
+    assert vecs.shape[0] == ids.shape[0] 
 
 typing_cache = None
 def handle_typing_timer(note):
@@ -111,7 +111,7 @@ def handle_typing_timer(note):
             # matching_prods = -high_dot_prods[sorted_ixs]
         else:
             sorted_ixs = np.argsort(dot_prods)
-            matching_ids = ids[mask][sorted_ixs][1:]
+            matching_ids = ids[mask][sorted_ixs[1:]]
             # matching_prods = -dot_prods[sorted_ixs]
         suggestion_window.clear()
         for id in matching_ids:
