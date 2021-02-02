@@ -83,7 +83,7 @@ def handle_modified_note(note, query_counts):
     vecs = tfidf.fit_transform(counts)
     if ix >= ids.shape[0] or ids[ix] != note.id:
         ids = np.concatenate((ids[:ix], [note.id], ids[ix:]))
-    assert vecs.shape[0] == ids.shape[0] 
+    # assert vecs.shape[0] == ids.shape[0] 
 
 typing_cache = None
 def handle_typing_timer(note):
@@ -96,7 +96,7 @@ def handle_typing_timer(note):
         query_counts = count_extractor.transform([" ".join(note.fields)])
         query = tfidf.transform(query_counts)
         dot_prods = (vecs @ query.T).A[:,0]
-        assert dot_prods.shape[0] == ids.shape[0] 
+        # assert dot_prods.shape[0] == ids.shape[0] 
         max_ixs = np.argpartition(-dot_prods, 5)[:9]
         high_dot_prods = dot_prods[max_ixs]
         mask = high_dot_prods > 0.1
