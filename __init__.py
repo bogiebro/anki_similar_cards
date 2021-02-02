@@ -100,13 +100,19 @@ def handle_typing_timer(note):
         typing_cache = text_hash
         query_counts = count_extractor.transform([" ".join(note.fields)])
         query = tfidf.transform(query_counts)
-        dot_prods = (vecs @ query.T).A[:,0]
-        # assert dot_prods.shape[0] == ids.shape[0] 
-        max_ixs = np.argpartition(-dot_prods, 5)[:9]
-        high_dot_prods = dot_prods[max_ixs]
-        mask = high_dot_prods > 0.1
-        sorted_ixs = np.argsort(high_dot_prods[mask])[::-1]
-        matching_ids = ids[max_ixs[mask][sorted_ixs][1:]]
+        dot_prods = -(vecs @ query.T).A[:,0]
+        mask = dot_prods < -0.14
+        dot_prods = dot_prods[mask]
+        if dot_prods.shape[0] > 8:
+            max_ixs = np.argpartition(dot_prods, 8)[:9]
+            high_dot_prods = dot_prods[max_ixs]
+            sorted_ixs = np.argsort(high_dot_prods)
+            matching_ids = ids[mask][max_ixs[sorted_ixs][1:]]
+            # matching_prods = -high_dot_prods[sorted_ixs]
+        else:
+            sorted_ixs = np.argsort(dot_prods)
+            matching_ids = ids[mask][sorted_ixs][1:]
+            # matching_prods = -dot_prods[sorted_ixs]
         suggestion_window.clear()
         for id in matching_ids:
             flds = mw.col.db.scalar(f"select flds from notes where id = {id}")
