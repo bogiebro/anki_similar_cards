@@ -25,7 +25,7 @@ def handle_open_window():
     global suggestion_window
     suggestion_window.show()
 
-action = QAction("Show Similar Cards", mw)
+action = QAction("Show Similar Notes", mw)
 action.triggered.connect(handle_open_window)
 mw.form.menuTools.addAction(action)
 
