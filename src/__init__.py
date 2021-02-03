@@ -84,11 +84,12 @@ class SuggestionWindow(QWidget):
 def handle_modified_note(note, query_counts):
     global counts, vecs, ids
     ix = np.searchsorted(ids, note.id)
-    counts = sp.vstack((counts[:ix,:], query_counts, counts[ix+1:,:]))
-    vecs = tfidf.fit_transform(counts)
-    if ix >= ids.shape[0] or ids[ix] != note.id:
+    if ix >= ids.shape[0] or ids[ix] != note.id: # New note
         ids = np.concatenate((ids[:ix], [note.id], ids[ix:]))
-    assert vecs.shape[0] == ids.shape[0] 
+        counts = sp.vstack((counts[:ix,:], query_counts, counts[ix:,:]))
+    else: # Old note
+        counts = sp.vstack((counts[:ix,:], query_counts, counts[ix+1:,:]))
+    vecs = tfidf.fit_transform(counts)
 
 typing_cache = None
 def handle_typing_timer(note):
