@@ -15,8 +15,9 @@ def init_counts():
     id_list = []
     def note_iterator():
         for id, flds in mw.col.db.execute("select id, flds from notes order by id"):
-            id_list.append(id)
-            yield " ".join(field_text(flds.split(chr(0x1f))))
+            if flds:
+                id_list.append(id)
+                yield " ".join(field_text(flds.split(chr(0x1f))))
     counts = count_extractor.transform(note_iterator())
     ids = np.array(id_list, dtype=np.long)
     vecs = tfidf.fit_transform(counts)
@@ -117,7 +118,8 @@ def handle_typing_timer(note):
         suggestion_window.clear()
         for id in matching_ids:
             flds = mw.col.db.scalar(f"select flds from notes where id = {id}")
-            suggestion_window.addItem(id, field_text(flds.split(chr(0x1f))))
+            if flds:
+                suggestion_window.addItem(id, field_text(flds.split(chr(0x1f))))
         if note.id > 0:
             handle_modified_note(note, query)
 
