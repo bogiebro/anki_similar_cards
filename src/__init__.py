@@ -103,7 +103,7 @@ def handle_typing_timer(note):
         query_counts = count_extractor.transform([" ".join(note.fields)])
         query = tfidf.transform(query_counts)
         dot_prods = -(vecs @ query.T).A[:,0]
-        mask = dot_prods < -0.14
+        mask = dot_prods < -0.1
         dot_prods = dot_prods[mask]
         if dot_prods.shape[0] > 8:
             max_ixs = np.argpartition(dot_prods, 8)[:9]
