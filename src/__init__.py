@@ -139,7 +139,7 @@ def init_hook():
     global count_extractor, tfidf, list_widget, suggestion_window
     suggestion_window = SuggestionWindow()
     count_extractor = HashingVectorizer(
-        stop_words='english', alternate_sign=False, norm=None)
+        stop_words='english', alternate_sign=False, norm=None, ngram_range=(1,3))
     tfidf = TfidfTransformer()
     init_counts()
 
